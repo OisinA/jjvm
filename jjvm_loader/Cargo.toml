@@ -1,0 +1,13 @@
+[package]
+name = "jjvm_loader"
+version = "0.1.0"
+authors = ["OisinA <oisinaylward@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cesu8 = "1.1.0"
+enum-map = "1.1.1"
+enum-map-derive = "*"
+combine = "4.1.0"
