@@ -16,6 +16,8 @@ pub enum JvmConst {
     MethodHandle(u8, u8),
     MethodType(u16),
     InvokeDynamic(u16, u16),
+    Module(u16),
+    Package(u16),
 }
 
 impl JvmConst {
@@ -42,6 +44,8 @@ impl JvmConst {
             0x0f => Ok(JvmConst::MethodHandle(loader.u1(), loader.u1())),
             0x10 => Ok(JvmConst::MethodType(loader.u2())),
             0x11 => Ok(JvmConst::InvokeDynamic(loader.u2(), loader.u2())),
+            0x12 => Ok(JvmConst::Module(loader.u2())),
+            0x13 => Ok(JvmConst::Package(loader.u2())),
             _ => Err(format!("invalid tag {:#04x}", tag)),
         }
     }

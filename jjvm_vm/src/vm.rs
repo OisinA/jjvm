@@ -3,6 +3,7 @@ use std::{collections::HashMap, time::Instant};
 use jjvm_loader::{class::Class, const_pool::Const, flags::MethodFlag, opcode::Opcode, signature};
 
 use crate::{frame::Frame, heap::Heap, jvm_val::JvmVal};
+use logging_timer::{time, timer};
 
 pub struct VM {
     pub heap: Heap,
@@ -16,6 +17,7 @@ pub struct VM {
 }
 
 impl VM {
+    #[time]
     pub fn exec(self: &mut VM, class: &Class, frame: &mut Frame) -> JvmVal {
         while frame.ip < frame.code.len() as u32 {
             let op = frame.code[frame.ip as usize];
@@ -24,8 +26,6 @@ impl VM {
                 Opcode::from(op),
                 frame.stack
             ));
-            self.debug(format!("Heap size: {:?}", self.heap.heap));
-            self.debug(format!("{:?}", self.references));
 
             if self.should_gc || self.heap.allocated_items() >= self.heap_last_gc_size * 2 {
                 let start = Instant::now();
@@ -50,8 +50,10 @@ impl VM {
                 self.should_gc = false;
             }
 
+            let _l = timer!("Matching", "Opcode = {:?}", Opcode::from(op));
             match Opcode::from(op) {
                 Opcode::Nop => {}
+                Opcode::IConstM1 => frame.stack.push(JvmVal::Int(-1)),
                 Opcode::IConst0 => frame.stack.push(JvmVal::Int(0)),
                 Opcode::IConst1 => frame.stack.push(JvmVal::Int(1)),
                 Opcode::IConst2 => frame.stack.push(JvmVal::Int(2)),
@@ -82,11 +84,31 @@ impl VM {
                     let refer = frame.locals[3].clone();
                     frame.stack.push(refer)
                 }
+                Opcode::ALoad => {
+                    let index = frame.read_one_byte_index();
+                    frame.stack.push(frame.locals[index as usize].clone());
+                }
                 Opcode::IStore0 => frame.locals[0] = JvmVal::Int(frame.pop_int()),
                 Opcode::IStore1 => frame.locals[1] = JvmVal::Int(frame.pop_int()),
                 Opcode::IStore2 => frame.locals[2] = JvmVal::Int(frame.pop_int()),
                 Opcode::IStore3 => frame.locals[3] = JvmVal::Int(frame.pop_int()),
                 Opcode::IStore => {
+                    let _istore = timer!("ISTORE");
+                    let index = frame.read_one_byte_index();
+                    if frame.locals.len() as u8 <= index {
+                        frame
+                            .locals
+                            .extend(vec![JvmVal::Null; index as usize - frame.locals.len() + 1]);
+                    }
+
+                    frame.locals[index as usize] = frame.stack.pop().unwrap();
+                }
+                Opcode::FStore0 => frame.locals[0] = JvmVal::Float(frame.pop_float()),
+                Opcode::FStore1 => frame.locals[1] = JvmVal::Float(frame.pop_float()),
+                Opcode::FStore2 => frame.locals[2] = JvmVal::Float(frame.pop_float()),
+                Opcode::FStore3 => frame.locals[3] = JvmVal::Float(frame.pop_float()),
+                Opcode::FStore => {
+                    let _istore = timer!("ISTORE");
                     let index = frame.read_one_byte_index();
                     if frame.locals.len() as u8 <= index {
                         frame
@@ -156,6 +178,14 @@ impl VM {
                     frame.ip = (frame.ip as i32 + offset as i32 - 3) as u32;
                     // self.should_gc = true;
                 }
+                Opcode::IfIcmpNe => {
+                    let offset = frame.read_two_byte_index();
+                    let b = frame.pop_int();
+                    let a = frame.pop_int();
+                    if a != b {
+                        frame.ip = (frame.ip as i32 + offset as i32 - 3) as u32;
+                    }
+                }
                 Opcode::IfIcmpGe => {
                     let offset = frame.read_two_byte_index();
                     let b = frame.pop_int();
@@ -179,6 +209,13 @@ impl VM {
                         frame.ip = (frame.ip as i32 + offset as i32 - 3) as u32
                     }
                 }
+                Opcode::IfEq => {
+                    let offset = frame.read_two_byte_index();
+                    let b = frame.pop_int();
+                    if b == 0 {
+                        frame.ip = (frame.ip as i32 + offset as i32 - 3) as u32
+                    }
+                }
                 Opcode::IReturn => {
                     self.references.remove(&frame.id);
                     return JvmVal::Int(frame.pop_int());
@@ -196,6 +233,7 @@ impl VM {
                     return JvmVal::Null;
                 }
                 Opcode::Ldc => {
+                    let _l = timer!("LDC");
                     let index = frame.read_one_byte_index();
                     let val = class.const_pool.resolve(index as u16).unwrap();
 
@@ -247,6 +285,7 @@ impl VM {
                     frame.push(JvmVal::Int(val));
                 }
                 Opcode::New => {
+                    let _l = timer!("New");
                     let index = frame.read_two_byte_index();
                     let cons = class.const_pool.resolve(index).unwrap();
                     let cls = self
@@ -262,7 +301,7 @@ impl VM {
                         vals.insert(f.name.clone(), JvmVal::Int(0));
                     }
 
-                    let ptr = self.heap.alloc(JvmVal::Class(vals));
+                    let ptr = self.heap.alloc(JvmVal::Class(cls.name.clone(), vals));
 
                     frame.push(JvmVal::Reference(ptr));
                 }
@@ -271,6 +310,7 @@ impl VM {
                     frame.push(val);
                 }
                 Opcode::PutField => {
+                    let _l = timer!("PUT_FIELD");
                     let index = frame.read_two_byte_index();
                     let v = class.const_pool.resolve(index).unwrap();
                     let (_, name, _) = deref_field_ref(v);
@@ -284,11 +324,12 @@ impl VM {
                     };
 
                     match self.heap.fetch_mut(ptr) {
-                        JvmVal::Class(vals) => vals.insert(name, value),
+                        JvmVal::Class(_, vals) => vals.insert(name, value),
                         _ => panic!("not a class, got {:?}", ptr),
                     };
                 }
                 Opcode::GetField => {
+                    let _l = timer!("GET_FIELD");
                     let index = frame.read_two_byte_index();
                     let refer = class.const_pool.resolve(index).unwrap();
                     let (_, name, _) = deref_field_ref(refer);
@@ -300,7 +341,7 @@ impl VM {
                     };
 
                     match self.heap.fetch(ptr) {
-                        JvmVal::Class(vals) => {
+                        JvmVal::Class(_, vals) => {
                             frame.stack.push(vals.get(&name).unwrap().clone());
                         }
                         _ => panic!("not a class at address {}", ptr),
@@ -308,6 +349,64 @@ impl VM {
                 }
                 Opcode::Pop => {
                     frame.stack.pop().unwrap();
+                }
+                Opcode::TableSwitch => {
+                    let origin_ip = frame.ip;
+
+                    let offset = (frame.ip + 1) % 4;
+                    frame.ip += (4 - offset) % 4;
+
+                    let default = frame.read_four_byte_index() as i32;
+                    let low = frame.read_four_byte_index() as i32;
+                    let high = frame.read_four_byte_index() as i32;
+
+                    let mut offsets = vec![];
+                    for _ in 0..high - low + 1 {
+                        offsets.push(frame.read_four_byte_index() as i32);
+                    }
+
+                    let index = frame.pop_int();
+
+                    if index < low || index > high {
+                        frame.ip = (origin_ip as i32 + default) as u32 - 1;
+                    } else {
+                        let position = index - low;
+                        let offset = offsets[position as usize];
+                        frame.ip = ((origin_ip as i32) + offset) as u32 - 1;
+                    }
+                }
+                Opcode::LookupSwitch => {
+                    let origin_ip = frame.ip;
+
+                    let offset = (frame.ip + 1) % 4;
+                    frame.ip += (4 - offset) % 4;
+
+                    let default = frame.read_four_byte_index() as i32;
+                    let npairs = frame.read_four_byte_index() as i32;
+
+                    let mut pairs = HashMap::new();
+                    for _ in 0..npairs {
+                        let int_match = frame.read_four_byte_index() as i32;
+                        let offset = frame.read_four_byte_index() as i32;
+                        pairs.insert(int_match, offset);
+                    }
+
+                    let key = frame.pop_int();
+
+                    if !pairs.contains_key(&key) {
+                        frame.ip = (origin_ip as i32 + default) as u32 - 1;
+                    } else {
+                        let offset = pairs.get(&key).unwrap();
+                        frame.ip = ((origin_ip as i32) + offset) as u32 - 1;
+                    }
+                }
+                Opcode::InstanceOf => {
+                    let _ = frame.read_two_byte_index();
+
+                    frame.stack.push(JvmVal::Int(1));
+                }
+                Opcode::CheckCast => {
+                    let _ = frame.read_two_byte_index();
                 }
                 _ => panic!("unhandled opcode {:?}, {:#04x}", Opcode::from(op), op),
             }
@@ -319,6 +418,7 @@ impl VM {
         JvmVal::Null
     }
 
+    #[time]
     fn invoke_virtual(
         self: &mut VM,
         class: &Class,
@@ -380,6 +480,7 @@ impl VM {
         // Actually load static
     }
 
+    #[time]
     fn invoke_static(
         self: &mut VM,
         class: &Class,
@@ -418,9 +519,11 @@ impl VM {
 
         let mut f = Frame::from_method(cls, name, args).unwrap();
 
+        let _a = timer!("Static Exec");
         self.exec(class, &mut f)
     }
 
+    #[time]
     fn invoke_special(
         self: &mut VM,
         class: &Class,
@@ -455,6 +558,7 @@ impl VM {
 
                     if val != *"java/lang/Object" {
                         // let cls = self.classes.get(&val).unwrap().clone();
+                        let _a = timer!("Special Exec");
                         let result = self.exec(&class, &mut f);
                         return result;
                     }
@@ -474,6 +578,7 @@ impl VM {
     }
 }
 
+#[time]
 fn parse_descriptors(descriptor: String) -> usize {
     signature::TypeSignature::from_str(descriptor)
         .unwrap()
@@ -481,6 +586,7 @@ fn parse_descriptors(descriptor: String) -> usize {
         .len()
 }
 
+#[time]
 fn deref_field_ref(cn: Const) -> (String, String, String) {
     match cn {
         Const::FieldRef(i, l) => match *i {

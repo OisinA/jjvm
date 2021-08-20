@@ -8,3 +8,6 @@ edition = "2018"
 
 [dependencies]
 jjvm_loader = { path = "../jjvm_loader" }
+logging_timer = "1.0.0"
+env_logger = "0.7"
+chrono = { version = "0.4", features = ["serde"] }

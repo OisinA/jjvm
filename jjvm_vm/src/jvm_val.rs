@@ -7,7 +7,7 @@ pub enum JvmVal {
     Int(i32),
     Long(i64),
     String(String),
-    Class(HashMap<String, JvmVal>),
+    Class(String, HashMap<String, JvmVal>),
     Reference(u32),
     Float(f32),
     Double(f64),

@@ -3,6 +3,8 @@ use core::panic;
 use jjvm_loader::class::Class;
 
 use crate::jvm_val::JvmVal;
+use logging_timer::time;
+use std::convert::TryInto;
 
 pub struct Frame {
     pub id: i32,
@@ -15,6 +17,7 @@ pub struct Frame {
 static mut FRAME_ID: i32 = 0;
 
 impl Frame {
+    #[time]
     pub fn from_method(class: &Class, method: String, args: Vec<JvmVal>) -> Result<Frame, String> {
         let m = class.methods.iter().find(|item| item.name == method);
         if m.is_none() {
@@ -76,6 +79,15 @@ impl Frame {
     pub fn read_two_byte_index(self: &mut Frame) -> u16 {
         self.ip += 2;
         ((self.code[(self.ip - 1) as usize] as u16) << 8) | (self.code[(self.ip) as usize] as u16)
+    }
+
+    pub fn read_four_byte_index(self: &mut Frame) -> u32 {
+        self.ip += 4;
+        u32::from_be_bytes(
+            self.code[self.ip as usize - 3..self.ip as usize + 1]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn read_one_byte_index(self: &mut Frame) -> u8 {

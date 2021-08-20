@@ -3,7 +3,13 @@ use std::{collections::HashMap, fs, io::Cursor};
 use jjvm_loader::class_loader::ClassLoader;
 use jjvm_vm::{frame::Frame, heap::Heap, vm::VM};
 
+use chrono::{DateTime, Utc};
+use env_logger::Builder;
+use std::io::Write;
+
 fn main() {
+    configure_logging();
+
     let mut loader = ClassLoader::new(Cursor::new(fs::read("../Test.class").unwrap()));
 
     let class = loader.load();
@@ -27,6 +33,31 @@ fn main() {
     let mut frame = Frame::from_method(&class, "main".to_string(), vec![]).unwrap();
 
     vm.exec(&class, &mut frame);
+}
 
-    println!("{:?}", vm.heap.heap.len());
+fn configure_logging() {
+    let mut builder = Builder::from_default_env();
+    builder.format(|buf, record| {
+        let utc: DateTime<Utc> = Utc::now();
+
+        write!(
+            buf,
+            "{:?} {} [{}] ",
+            //utc.format("%Y-%m-%dT%H:%M:%S.%fZ"),
+            utc, // same, probably faster?
+            record.level(),
+            record.target()
+        )?;
+
+        match (record.file(), record.line()) {
+            (Some(file), Some(line)) => write!(buf, "[{}/{}] ", file, line),
+            (Some(file), None) => write!(buf, "[{}] ", file),
+            (None, Some(_line)) => write!(buf, " "),
+            (None, None) => write!(buf, " "),
+        }?;
+
+        writeln!(buf, "{}", record.args())
+    });
+
+    builder.init();
 }

@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 
 use crate::jvm_val::JvmVal;
+use logging_timer::time;
 
 pub struct Heap {
     pub heap: Vec<(JvmVal, bool)>,
 }
 
 impl Heap {
+    #[time]
     pub fn alloc(self: &mut Heap, val: JvmVal) -> u32 {
         let free = self.free_block();
         if free.is_none() {
@@ -43,12 +45,13 @@ impl Heap {
         self.heap.iter().filter(|i| i.1).count()
     }
 
+    #[time]
     pub fn gc(self: &mut Heap, references: HashMap<i32, Vec<u32>>) -> i32 {
         let references: Vec<_> = references.values().flatten().collect();
         let mut all_refs = vec![];
         for refer in references {
             all_refs.push(*refer);
-            if let JvmVal::Class(vals) = self.heap[*refer as usize].clone().0 {
+            if let JvmVal::Class(_, vals) = self.heap[*refer as usize].clone().0 {
                 for val in vals.values() {
                     if let JvmVal::Reference(_) = val {
                         all_refs.append(&mut self.check_class(val.clone()));
