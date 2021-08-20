@@ -1,5 +1,5 @@
 #[macro_use]
-extern crate enum_map_derive;
+extern crate num_derive;
 
 pub mod class;
 pub mod class_loader;

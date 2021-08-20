@@ -1,6 +1,6 @@
-use enum_map::EnumMap;
+use num_traits::FromPrimitive;
 
-#[derive(Debug, Enum)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
 pub enum Opcode {
     Nop,
     AConstNull,
@@ -209,15 +209,6 @@ pub enum Opcode {
 
 impl From<u8> for Opcode {
     fn from(val: u8) -> Opcode {
-        // Likely quite slow creating this map every time the function is called
-        let mut map: EnumMap<Opcode, u8> = EnumMap::default();
-        let mut index: u8 = 0x00;
-        let mut y = map.iter_mut().map(|(k, _)| {
-            let to_ret = (index, k);
-            index += 1;
-            to_ret
-        });
-
-        y.find(|(x, _)| *x == val).unwrap().1
+        FromPrimitive::from_u8(val).unwrap()
     }
 }
