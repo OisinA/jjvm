@@ -13,11 +13,8 @@ impl Heap {
         let free = self.free_block();
         if free.is_none() {
             self.heap.push((val, true));
-            // println!("being placed at end, no empty blocks");
             return self.heap.len() as u32 - 1;
         }
-
-        // println!("being placed at {}", free.unwrap(),);
 
         self.heap[free.unwrap() as usize] = (val, true);
         free.unwrap()

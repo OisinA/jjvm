@@ -21,7 +21,7 @@ impl Frame {
     pub fn from_method(class: &Class, method: String, args: Vec<JvmVal>) -> Result<Frame, String> {
         let m = class.methods.iter().find(|item| item.name == method);
         if m.is_none() {
-            return Err("method not found".to_string());
+            return Err(format!("method not found {}.{}", class.name, method));
         }
 
         let code_attribute = m

@@ -21,11 +21,15 @@ impl VM {
     pub fn exec(self: &mut VM, class: &Class, frame: &mut Frame) -> JvmVal {
         while frame.ip < frame.code.len() as u32 {
             let op = frame.code[frame.ip as usize];
-            self.debug(format!(
-                "Opcode: {:?} Stack: {:?}",
-                Opcode::from(op),
-                frame.stack
-            ));
+            self.debug(
+                frame.id,
+                format!(
+                    "CodeIndex: {:?} Opcode: {:?} Stack: {:?}",
+                    frame.ip,
+                    Opcode::from(op),
+                    frame.stack
+                ),
+            );
 
             if self.should_gc || self.heap.allocated_items() >= self.heap_last_gc_size * 2 {
                 let start = Instant::now();
@@ -40,13 +44,14 @@ impl VM {
                         refs.push(*x);
                     }
                 }
-                self.references.insert(frame.id, refs);
+                self.references.insert(frame.id, refs.clone());
                 let claimed = self.heap.gc(self.references.clone());
                 self.heap_last_gc_size = self.heap.allocated_items();
-                self.debug(format!("Heap size: {:?}", self.heap.heap.len()));
-                self.debug(format!("Reclaimed blocks: {}", claimed));
+                self.debug(frame.id, format!("Heap size: {:?}", self.heap.heap.len()));
+                self.debug(frame.id, format!("Reclaimed blocks: {}", claimed));
+                println!("{:?}", self.heap.heap);
                 let duration = start.elapsed();
-                self.debug(format!("GC ran in {}ms", duration.as_millis()));
+                self.debug(frame.id, format!("GC ran in {}ms", duration.as_millis()));
                 self.should_gc = false;
             }
 
@@ -174,8 +179,8 @@ impl VM {
                     };
                 }
                 Opcode::Goto => {
-                    let offset = frame.read_two_byte_index() as i16;
-                    frame.ip = (frame.ip as i32 + offset as i32 - 3) as u32;
+                    let offset = frame.read_two_byte_index() as i32;
+                    frame.ip = (frame.ip as i32 + offset - 3) as u32;
                     // self.should_gc = true;
                 }
                 Opcode::IfIcmpNe => {
@@ -427,6 +432,7 @@ impl VM {
         _args: Vec<JvmVal>,
     ) -> JvmVal {
         let l = class.const_pool.resolve(index).unwrap();
+        self.debug(frame.id, format!("invoke_virtual: {:?}", l));
         match l {
             Const::MethodRef(i, l) => match *i {
                 Const::String(val) => match val.as_str() {
@@ -455,15 +461,16 @@ impl VM {
                         for _ in 0..parse_descriptors(typ) {
                             args.push(frame.stack.pop().unwrap());
                         }
+                        let cls = self.classes.get(&val).unwrap().clone();
                         if !MethodFlag::Static
-                            .is_set(class.methods.iter().find(|x| x.name == name).unwrap().flags)
+                            .is_set(cls.methods.iter().find(|x| x.name == name).unwrap().flags)
                         {
-                            let refer = frame.stack.last().unwrap().clone();
+                            let refer = frame.stack.pop().unwrap().clone();
                             args.insert(0, refer);
                         }
-                        let mut f = Frame::from_method(class, name, args).unwrap();
+                        let mut f = Frame::from_method(&cls, name, args).unwrap();
 
-                        let result = self.exec(class, &mut f);
+                        let result = self.exec(&cls, &mut f);
                         frame.stack.push(result);
                     }
                 },
@@ -489,6 +496,7 @@ impl VM {
         _: Vec<JvmVal>,
     ) -> JvmVal {
         let v = class.const_pool.resolve(index).unwrap();
+        self.debug(frame.id, format!("invoke_static: {:?}", v));
         let (class_name, name, typ) = match v {
             Const::MethodRef(class_name, nat) => match *nat {
                 Const::NameAndType(name, typ) => (
@@ -532,6 +540,7 @@ impl VM {
         _: Vec<JvmVal>,
     ) -> JvmVal {
         let l = class.const_pool.resolve(index).unwrap();
+        self.debug(frame.id, format!("invoke_special: {:?}", l));
         match l {
             Const::MethodRef(i, l) => match *i {
                 Const::String(val) => {
@@ -554,27 +563,28 @@ impl VM {
                     }
                     args.reverse();
                     args.insert(0, frame.stack.pop().unwrap());
-                    let mut f = Frame::from_method(class, name, args).unwrap();
 
                     if val != *"java/lang/Object" {
                         // let cls = self.classes.get(&val).unwrap().clone();
+                        let cls = self.classes.get(&val).unwrap().clone();
+                        let mut f = Frame::from_method(&cls, name, args).unwrap();
                         let _a = timer!("Special Exec");
-                        let result = self.exec(&class, &mut f);
+                        let result = self.exec(&cls, &mut f);
                         return result;
                     }
                 }
                 _ => panic!(),
             },
-            _ => panic!(),
+            _ => {}
         }
         JvmVal::Null
     }
 
-    pub fn debug(self: &mut VM, message: String) {
+    pub fn debug(self: &mut VM, frame_id: i32, message: String) {
         if !self.debug {
             return;
         }
-        println!("{}", message);
+        println!("{}: {}", frame_id, message);
     }
 }
 
@@ -602,6 +612,7 @@ fn deref_field_ref(cn: Const) -> (String, String, String) {
             },
             _ => panic!(),
         },
+        // Const::String(val) => ("".to_string(), val, "".to_string()),
         _ => panic!("not a fieldref, got {:?}", cn),
     }
 }
