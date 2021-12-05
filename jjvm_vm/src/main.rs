@@ -6,6 +6,7 @@ use jjvm_vm::{frame::Frame, heap::Heap, vm::VM};
 use chrono::{DateTime, Utc};
 use env_logger::Builder;
 use std::io::Write;
+use walkdir::WalkDir;
 
 fn main() {
     configure_logging();
@@ -26,6 +27,23 @@ fn main() {
         should_gc: false,
         debug: false,
     };
+
+    for entry in WalkDir::new("../std")
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let f_name = entry.path().to_string_lossy().to_string();
+        if !fs::metadata(f_name.clone()).unwrap().is_file() {
+            continue;
+        }
+        println!("{}", f_name);
+        let mut loader = ClassLoader::new(Cursor::new(fs::read(f_name).unwrap()));
+
+        let class = loader.load();
+        let name = class.name.clone();
+        vm.classes.insert(name, class.clone());
+    }
 
     vm.classes.insert("Test".to_string(), class.clone());
     vm.classes.insert("OtherTest".to_string(), add_class);

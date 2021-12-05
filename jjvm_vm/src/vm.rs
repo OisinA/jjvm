@@ -2,7 +2,12 @@ use std::{collections::HashMap, time::Instant};
 
 use jjvm_loader::{class::Class, const_pool::Const, flags::MethodFlag, opcode::Opcode, signature};
 
-use crate::{frame::Frame, heap::Heap, jvm_val::JvmVal};
+use crate::{
+    frame::Frame,
+    heap::Heap,
+    jvm_val::JvmVal,
+    stdlib::{self, class::BuiltinClass},
+};
 use logging_timer::{time, timer};
 
 pub struct VM {
@@ -49,7 +54,6 @@ impl VM {
                 self.heap_last_gc_size = self.heap.allocated_items();
                 self.debug(frame.id, format!("Heap size: {:?}", self.heap.heap.len()));
                 self.debug(frame.id, format!("Reclaimed blocks: {}", claimed));
-                println!("{:?}", self.heap.heap);
                 let duration = start.elapsed();
                 self.debug(frame.id, format!("GC ran in {}ms", duration.as_millis()));
                 self.should_gc = false;
@@ -65,6 +69,11 @@ impl VM {
                 Opcode::IConst3 => frame.stack.push(JvmVal::Int(3)),
                 Opcode::IConst4 => frame.stack.push(JvmVal::Int(4)),
                 Opcode::IConst5 => frame.stack.push(JvmVal::Int(5)),
+                Opcode::AConstNull => frame.stack.push(JvmVal::Null),
+                Opcode::ILoad => {
+                    let index = frame.read_one_byte_index();
+                    frame.stack.push(frame.locals[index as usize].clone());
+                }
                 Opcode::ILoad0 => frame.stack.push(frame.locals[0].clone()),
                 Opcode::ILoad1 => frame.stack.push(frame.locals[1].clone()),
                 Opcode::ILoad2 => frame.stack.push(frame.locals[2].clone()),
@@ -114,6 +123,17 @@ impl VM {
                 Opcode::FStore3 => frame.locals[3] = JvmVal::Float(frame.pop_float()),
                 Opcode::FStore => {
                     let _istore = timer!("ISTORE");
+                    let index = frame.read_one_byte_index();
+                    if frame.locals.len() as u8 <= index {
+                        frame
+                            .locals
+                            .extend(vec![JvmVal::Null; index as usize - frame.locals.len() + 1]);
+                    }
+
+                    frame.locals[index as usize] = frame.stack.pop().unwrap();
+                }
+                Opcode::AStore => {
+                    let _istore = timer!("ASTORE");
                     let index = frame.read_one_byte_index();
                     if frame.locals.len() as u8 <= index {
                         frame
@@ -179,8 +199,8 @@ impl VM {
                     };
                 }
                 Opcode::Goto => {
-                    let offset = frame.read_two_byte_index() as i32;
-                    frame.ip = (frame.ip as i32 + offset - 3) as u32;
+                    let offset = frame.read_two_byte_index() as i16;
+                    frame.ip = (frame.ip as i16 + offset - 3) as u32;
                     // self.should_gc = true;
                 }
                 Opcode::IfIcmpNe => {
@@ -207,6 +227,14 @@ impl VM {
                         frame.ip = (frame.ip as i32 + offset as i32 - 3) as u32
                     }
                 }
+                Opcode::IfIcmpLe => {
+                    let offset = frame.read_two_byte_index();
+                    let b = frame.pop_int();
+                    let a = frame.pop_int();
+                    if a <= b {
+                        frame.ip = (frame.ip as i32 + offset as i32 - 3) as u32;
+                    }
+                }
                 Opcode::IfNe => {
                     let offset = frame.read_two_byte_index();
                     let b = frame.pop_int();
@@ -218,6 +246,18 @@ impl VM {
                     let offset = frame.read_two_byte_index();
                     let b = frame.pop_int();
                     if b == 0 {
+                        frame.ip = (frame.ip as i32 + offset as i32 - 3) as u32
+                    }
+                }
+                Opcode::IfNonNull => {
+                    let offset = frame.read_two_byte_index();
+                    let popped = frame.stack.pop().unwrap();
+                    // let ptr = match popped {
+                    //     JvmVal::Int(i) => i,
+                    //     _ => panic!("not an int, got {:?}", popped),
+                    // };
+                    // let b = self.heap.fetch(ptr as u32);
+                    if popped != JvmVal::Null {
                         frame.ip = (frame.ip as i32 + offset as i32 - 3) as u32
                     }
                 }
@@ -293,22 +333,42 @@ impl VM {
                     let _l = timer!("New");
                     let index = frame.read_two_byte_index();
                     let cons = class.const_pool.resolve(index).unwrap();
-                    let cls = self
-                        .classes
-                        .get(&match cons.clone() {
+                    let clss = self.classes.get(&match cons.clone() {
+                        Const::String(val) => val,
+                        _ => panic!(),
+                    });
+
+                    if clss.is_some() {
+                        let cls = clss.unwrap();
+                        let mut vals = HashMap::new();
+                        for f in &cls.fields {
+                            vals.insert(f.name.clone(), JvmVal::Int(0));
+                        }
+
+                        let ptr = self.heap.alloc(JvmVal::Class(cls.name.clone(), vals));
+
+                        frame.push(JvmVal::Reference(ptr));
+                    } else {
+                        let name = match cons.clone() {
                             Const::String(val) => val,
                             _ => panic!(),
-                        })
-                        .unwrap_or_else(|| panic!("Could not find class {:?}", cons));
+                        };
+                        let builtin_cls = stdlib::get_builtins(match cons.clone() {
+                            Const::String(val) => val,
+                            _ => panic!(),
+                        });
 
-                    let mut vals = HashMap::new();
-                    for f in &cls.fields {
-                        vals.insert(f.name.clone(), JvmVal::Int(0));
+                        let mut vals = HashMap::new();
+                        for f in builtin_cls.get_fields() {
+                            vals.insert(f.name.clone(), JvmVal::Int(0));
+                        }
+
+                        let ptr = self
+                            .heap
+                            .alloc(JvmVal::Class(name.clone().to_string(), vals));
+
+                        frame.push(JvmVal::Reference(ptr));
                     }
-
-                    let ptr = self.heap.alloc(JvmVal::Class(cls.name.clone(), vals));
-
-                    frame.push(JvmVal::Reference(ptr));
                 }
                 Opcode::Dup => {
                     let val = frame.stack.last().unwrap().clone();
@@ -342,6 +402,10 @@ impl VM {
                     let popped = frame.stack.pop().unwrap();
                     let ptr = match popped {
                         JvmVal::Reference(ptr) => ptr,
+                        JvmVal::Null => {
+                            frame.stack.push(JvmVal::Null);
+                            return JvmVal::Null;
+                        }
                         _ => panic!("not a reference, got {:?}", popped),
                     };
 
@@ -443,6 +507,30 @@ impl VM {
                             JvmVal::String(val) => println!("{}", val),
                             JvmVal::Int(val) => println!("{}", val),
                             JvmVal::Float(val) => println!("{}", val),
+                            JvmVal::Reference(val) => {
+                                let val = self.heap.fetch(*val);
+                                match val {
+                                    JvmVal::Class(name, vals) => {
+                                        if name == "java/lang/Boolean" {
+                                            println!(
+                                                "{}",
+                                                if vals.get("value").unwrap().clone()
+                                                    == JvmVal::Int(0)
+                                                {
+                                                    "false"
+                                                } else {
+                                                    "true"
+                                                }
+                                            );
+                                        } else {
+                                            for (k, v) in vals {
+                                                println!("{:?}: {:?}", k, v);
+                                            }
+                                        }
+                                    }
+                                    _ => panic!("not a class"),
+                                }
+                            }
                             _ => println!("{:?}", args[0]),
                         }
                     }
@@ -461,17 +549,27 @@ impl VM {
                         for _ in 0..parse_descriptors(typ) {
                             args.push(frame.stack.pop().unwrap());
                         }
-                        let cls = self.classes.get(&val).unwrap().clone();
-                        if !MethodFlag::Static
-                            .is_set(cls.methods.iter().find(|x| x.name == name).unwrap().flags)
-                        {
+                        let clss = self.classes.get(&val);
+                        if clss.is_some() {
+                            let cls = clss.unwrap().clone();
+                            if !MethodFlag::Static
+                                .is_set(cls.methods.iter().find(|x| x.name == name).unwrap().flags)
+                            {
+                                let refer = frame.stack.pop().unwrap().clone();
+                                args.insert(0, refer);
+                            }
+                            let mut f = Frame::from_method(&cls, name, args).unwrap();
+
+                            let result = self.exec(&cls, &mut f);
+                            frame.stack.push(result);
+                        } else {
+                            let builtin = stdlib::get_builtins(val.clone());
+
                             let refer = frame.stack.pop().unwrap().clone();
                             args.insert(0, refer);
-                        }
-                        let mut f = Frame::from_method(&cls, name, args).unwrap();
 
-                        let result = self.exec(&cls, &mut f);
-                        frame.stack.push(result);
+                            return builtin.get_method(name)(self, args);
+                        }
                     }
                 },
                 _ => panic!(),
@@ -523,12 +621,20 @@ impl VM {
             args.push(frame.stack.pop().unwrap());
         }
 
-        let cls = self.classes.get(&class_name).unwrap();
+        let clss = self.classes.get(&class_name);
 
-        let mut f = Frame::from_method(cls, name, args).unwrap();
+        if clss.is_some() {
+            let cls = clss.unwrap();
 
-        let _a = timer!("Static Exec");
-        self.exec(class, &mut f)
+            let mut f = Frame::from_method(cls, name, args).unwrap();
+
+            let _a = timer!("Static Exec");
+            return self.exec(class, &mut f);
+        }
+
+        let builtin = stdlib::get_builtins(class_name.clone());
+
+        return builtin.get_method(name)(self, args);
     }
 
     #[time]
@@ -566,11 +672,18 @@ impl VM {
 
                     if val != *"java/lang/Object" {
                         // let cls = self.classes.get(&val).unwrap().clone();
-                        let cls = self.classes.get(&val).unwrap().clone();
-                        let mut f = Frame::from_method(&cls, name, args).unwrap();
-                        let _a = timer!("Special Exec");
-                        let result = self.exec(&cls, &mut f);
-                        return result;
+                        let clss = self.classes.get(&val);
+                        if clss.is_some() {
+                            let cls = clss.unwrap().clone();
+                            let mut f = Frame::from_method(&cls, name, args).unwrap();
+                            let _a = timer!("Special Exec");
+                            let result = self.exec(&cls, &mut f);
+                            return result;
+                        }
+
+                        let builtin = stdlib::get_builtins(val.clone());
+
+                        return builtin.get_method(name)(self, args);
                     }
                 }
                 _ => panic!(),

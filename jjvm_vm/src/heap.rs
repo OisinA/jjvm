@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::jvm_val::JvmVal;
 use logging_timer::time;
 
+#[derive(Debug)]
 pub struct Heap {
     pub heap: Vec<(JvmVal, bool)>,
 }
