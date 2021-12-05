@@ -102,6 +102,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "java-utils"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d297521cbb9571836820b10efa36a96e09889ccca4f6a6091a22f69e6a8a34bf"
+
+[[package]]
 name = "jjvm_loader"
 version = "0.1.0"
 dependencies = [
@@ -117,6 +123,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "env_logger",
+ "java-utils",
  "jjvm_loader",
  "logging_timer",
  "walkdir",

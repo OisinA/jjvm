@@ -14,4 +14,5 @@ pub enum JvmVal {
     Double(f64),
     Null,
     Boolean(bool),
+    Array(Vec<JvmVal>),
 }

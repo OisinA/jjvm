@@ -28,6 +28,8 @@ impl BuiltinClass for IntegerClass {
         match method.as_str() {
             "<init>" => IntegerClass::init,
             "parseInt" => IntegerClass::parse_int,
+            "valueOf" => IntegerClass::value_of,
+            "intValue" => IntegerClass::int_value,
             _ => panic!("method not found {}", method),
         }
     }
@@ -35,8 +37,15 @@ impl BuiltinClass for IntegerClass {
 
 impl IntegerClass {
     fn init(vm: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
-        println!("{:?}", vals);
-        JvmVal::Null
+        let mut v = HashMap::new();
+
+        v.insert("value".to_string(), vals[0].clone());
+
+        let ptr = vm
+            .heap
+            .alloc(JvmVal::Class("java/lang/Integer".to_string(), v));
+
+        JvmVal::Reference(ptr)
     }
 
     fn parse_int(vm: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
@@ -48,5 +57,35 @@ impl IntegerClass {
             }
             _ => panic!("parseInt expects a string"),
         }
+    }
+
+    fn value_of(vm: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
+        match &vals[0] {
+            JvmVal::String(s) => {
+                let s = s.as_str();
+                let i = s.parse::<i32>().unwrap();
+                JvmVal::Int(i)
+            }
+            _ => panic!("valueOf expects a string, got {:?}", vals[0]),
+        }
+    }
+
+    fn int_value(vm: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
+        let ptr = match vals[0].clone() {
+            JvmVal::Reference(ptr) => ptr,
+            JvmVal::Int(v) => return JvmVal::Int(v),
+            _ => panic!("invalid argument, got {:?}", vals[0]),
+        };
+        let scanner_values = match vm.heap.fetch(ptr) {
+            JvmVal::Class(_, v) => v,
+            _ => panic!("invalid argument"),
+        };
+
+        let value = match scanner_values.get("value") {
+            Some(v) => v,
+            None => panic!("invalid argument"),
+        };
+
+        return value.clone();
     }
 }

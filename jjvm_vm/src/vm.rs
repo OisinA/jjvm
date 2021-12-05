@@ -102,6 +102,27 @@ impl VM {
                     let index = frame.read_one_byte_index();
                     frame.stack.push(frame.locals[index as usize].clone());
                 }
+                Opcode::AaLoad => {
+                    let index = frame.pop_int();
+                    let arrayref = match frame.stack.pop().unwrap() {
+                        JvmVal::Reference(x) => x,
+                        _ => panic!("ALoad: Expected reference"),
+                    };
+
+                    let array = match self.heap.fetch(arrayref) {
+                        JvmVal::Array(vals) => &vals[index as usize],
+                        _ => panic!("ALoad: Expected array"),
+                    };
+
+                    let refer = match array {
+                        JvmVal::Reference(x) => *x,
+                        _ => panic!("ALoad: Expected reference"),
+                    };
+
+                    let loaded = self.heap.fetch(refer);
+
+                    frame.stack.push(loaded.clone());
+                }
                 Opcode::IStore0 => frame.locals[0] = JvmVal::Int(frame.pop_int()),
                 Opcode::IStore1 => frame.locals[1] = JvmVal::Int(frame.pop_int()),
                 Opcode::IStore2 => frame.locals[2] = JvmVal::Int(frame.pop_int()),
