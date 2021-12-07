@@ -5,6 +5,7 @@ pub mod boolean;
 pub mod class;
 pub mod file;
 pub mod integer;
+pub mod math;
 pub mod scanner;
 pub mod string;
 
@@ -15,6 +16,7 @@ pub fn get_builtins(name: String) -> Box<dyn BuiltinClass> {
         "java/lang/Boolean" => Box::new(boolean::BooleanClass {}),
         "java/lang/Integer" => Box::new(integer::IntegerClass {}),
         "java/lang/String" => Box::new(string::StringClass {}),
+        "java/lang/Math" => Box::new(math::MathClass {}),
         _ => panic!("Builtin class not found: {}", name),
     }
 }

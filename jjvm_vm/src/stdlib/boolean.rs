@@ -35,7 +35,7 @@ impl BuiltinClass for BooleanClass {
 }
 
 impl BooleanClass {
-    fn init(vm: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
+    fn init(_: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
         println!("{:?}", vals);
         JvmVal::Null
     }

@@ -48,7 +48,7 @@ impl IntegerClass {
         JvmVal::Reference(ptr)
     }
 
-    fn parse_int(vm: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
+    fn parse_int(_: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
         match &vals[0] {
             JvmVal::String(s) => {
                 let s = s.as_str();
@@ -59,7 +59,7 @@ impl IntegerClass {
         }
     }
 
-    fn value_of(vm: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
+    fn value_of(_: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
         match &vals[0] {
             JvmVal::String(s) => {
                 let s = s.as_str();

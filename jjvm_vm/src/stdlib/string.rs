@@ -1,8 +1,3 @@
-use std::{
-    collections::HashMap,
-    hash::{Hash, Hasher},
-};
-
 use jjvm_loader::class::Field;
 
 use crate::{jvm_val::JvmVal, vm::VM};
@@ -41,7 +36,7 @@ impl BuiltinClass for StringClass {
 }
 
 impl StringClass {
-    fn init(vm: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
+    fn init(_: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
         println!("{:?}", vals);
         JvmVal::Null
     }
@@ -52,8 +47,13 @@ impl StringClass {
             _ => panic!("split expects string"),
         };
 
+        let split_char = match vals[1].clone() {
+            JvmVal::String(s) => s,
+            _ => panic!("split expects string"),
+        };
+
         let result = str
-            .split(" ")
+            .split(split_char.as_str())
             .map(|s| s.to_string())
             .map(|s| JvmVal::String(s))
             .collect::<Vec<JvmVal>>();

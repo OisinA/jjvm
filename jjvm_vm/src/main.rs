@@ -25,7 +25,7 @@ fn main() {
         references: HashMap::new(),
         heap_last_gc_size: 4,
         should_gc: false,
-        debug: false,
+        debug: true,
     };
 
     for entry in WalkDir::new("../std")

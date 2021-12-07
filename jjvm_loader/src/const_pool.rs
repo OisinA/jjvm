@@ -35,6 +35,10 @@ impl ConstPool {
                 Box::new(self.resolve(*i).unwrap()),
                 Box::new(self.resolve(*j).unwrap()),
             )),
+            JvmConst::InvokeDynamic(i, j) => Ok(Const::MethodRef(
+                Box::new(self.resolve(*i).unwrap()),
+                Box::new(self.resolve(*j).unwrap()),
+            )),
             _ => Err("const not found".to_string()),
         }
     }

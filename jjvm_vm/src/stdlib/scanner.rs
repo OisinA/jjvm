@@ -77,11 +77,6 @@ impl ScannerClass {
             _ => panic!("invalid argument"),
         };
 
-        let file = match scanner_values.get(&"file".to_string()) {
-            Some(v) => v,
-            None => panic!("invalid argument"),
-        };
-
         let line_pointer = match scanner_values.get(&"line_pointer".to_string()) {
             Some(v) => match v {
                 JvmVal::Int(i) => i,
@@ -113,7 +108,7 @@ impl ScannerClass {
             _ => panic!("invalid argument"),
         };
 
-        let mut scanner = vm.heap.fetch_mut(ptr);
+        let scanner = vm.heap.fetch_mut(ptr);
 
         let scanner_values = match scanner {
             JvmVal::Class(_, v) => v,
@@ -149,7 +144,7 @@ impl ScannerClass {
         )
     }
 
-    fn close(vm: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
+    fn close(_: &mut VM, _: Vec<JvmVal>) -> JvmVal {
         JvmVal::Null
     }
 }

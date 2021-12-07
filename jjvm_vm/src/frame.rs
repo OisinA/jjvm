@@ -72,6 +72,15 @@ impl Frame {
         panic!("popped value was not float, got {:?}", val);
     }
 
+    pub fn pop_double(self: &mut Frame) -> f64 {
+        let val = self.stack.pop().unwrap();
+        if let JvmVal::Double(x) = val {
+            return x;
+        }
+
+        panic!("popped value was not double, got {:?}", val);
+    }
+
     pub fn push(self: &mut Frame, val: JvmVal) {
         self.stack.push(val);
     }

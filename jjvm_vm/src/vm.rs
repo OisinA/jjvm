@@ -2,12 +2,7 @@ use std::{collections::HashMap, time::Instant};
 
 use jjvm_loader::{class::Class, const_pool::Const, flags::MethodFlag, opcode::Opcode, signature};
 
-use crate::{
-    frame::Frame,
-    heap::Heap,
-    jvm_val::JvmVal,
-    stdlib::{self, class::BuiltinClass},
-};
+use crate::{frame::Frame, heap::Heap, jvm_val::JvmVal, stdlib};
 use logging_timer::{time, timer};
 
 pub struct VM {
@@ -69,6 +64,7 @@ impl VM {
                 Opcode::IConst3 => frame.stack.push(JvmVal::Int(3)),
                 Opcode::IConst4 => frame.stack.push(JvmVal::Int(4)),
                 Opcode::IConst5 => frame.stack.push(JvmVal::Int(5)),
+                Opcode::FConst0 => frame.stack.push(JvmVal::Float(0.0)),
                 Opcode::AConstNull => frame.stack.push(JvmVal::Null),
                 Opcode::ILoad => {
                     let index = frame.read_one_byte_index();
@@ -78,6 +74,10 @@ impl VM {
                 Opcode::ILoad1 => frame.stack.push(frame.locals[1].clone()),
                 Opcode::ILoad2 => frame.stack.push(frame.locals[2].clone()),
                 Opcode::ILoad3 => frame.stack.push(frame.locals[3].clone()),
+                Opcode::FLoad => {
+                    let index = frame.read_one_byte_index();
+                    frame.stack.push(frame.locals[index as usize].clone());
+                }
                 Opcode::FLoad0 => frame.stack.push(frame.locals[0].clone()),
                 Opcode::FLoad1 => frame.stack.push(frame.locals[1].clone()),
                 Opcode::FLoad2 => frame.stack.push(frame.locals[2].clone()),
@@ -122,6 +122,19 @@ impl VM {
                     let loaded = self.heap.fetch(refer);
 
                     frame.stack.push(loaded.clone());
+                }
+                Opcode::ArrayLength => {
+                    let arrayref = match frame.stack.pop().unwrap() {
+                        JvmVal::Reference(x) => x,
+                        _ => panic!("ALoad: Expected reference"),
+                    };
+
+                    let length = match self.heap.fetch(arrayref) {
+                        JvmVal::Array(vals) => vals.len(),
+                        _ => panic!("ALoad: Expected array"),
+                    };
+
+                    frame.stack.push(JvmVal::Int(length as i32));
                 }
                 Opcode::IStore0 => frame.locals[0] = JvmVal::Int(frame.pop_int()),
                 Opcode::IStore1 => frame.locals[1] = JvmVal::Int(frame.pop_int()),
@@ -183,10 +196,19 @@ impl VM {
                     let a = frame.pop_int();
                     frame.push(JvmVal::Int(a * b));
                 }
+                Opcode::IDiv => {
+                    let b = frame.pop_int();
+                    let a = frame.pop_int();
+                    frame.push(JvmVal::Int(a / b));
+                }
                 Opcode::IRem => {
                     let b = frame.pop_int();
                     let a = frame.pop_int();
                     frame.push(JvmVal::Int(a - (a / b) * b));
+                }
+                Opcode::I2F => {
+                    let b = frame.pop_int();
+                    frame.push(JvmVal::Float(b as f32));
                 }
                 Opcode::FAdd => {
                     let b = frame.pop_float();
@@ -203,10 +225,23 @@ impl VM {
                     let a = frame.pop_float();
                     frame.push(JvmVal::Float(a * b));
                 }
+                Opcode::FDiv => {
+                    let b = frame.pop_float();
+                    let a = frame.pop_float();
+                    frame.push(JvmVal::Float(a / b));
+                }
                 Opcode::FRem => {
                     let b = frame.pop_float();
                     let a = frame.pop_float();
                     frame.push(JvmVal::Float(a - (a / b) * b));
+                }
+                Opcode::F2D => {
+                    let b = frame.pop_float();
+                    frame.push(JvmVal::Double(b as f64));
+                }
+                Opcode::D2I => {
+                    let b = frame.pop_double();
+                    frame.push(JvmVal::Int(b as i32));
                 }
                 Opcode::IInc => {
                     let index = frame.read_one_byte_index();
@@ -337,6 +372,15 @@ impl VM {
                     let index = frame.read_two_byte_index();
                     let result = self.invoke_special(class, frame, index, vec![]);
 
+                    if let JvmVal::Null = result {
+                    } else {
+                        frame.push(result);
+                    }
+                }
+                Opcode::InvokeDynamic => {
+                    let index = frame.read_two_byte_index();
+                    frame.read_two_byte_index();
+                    let result = self.invoke_dynamic(class, frame, index, vec![]);
                     if let JvmVal::Null = result {
                     } else {
                         frame.push(result);
@@ -518,6 +562,100 @@ impl VM {
     ) -> JvmVal {
         let l = class.const_pool.resolve(index).unwrap();
         self.debug(frame.id, format!("invoke_virtual: {:?}", l));
+        match l {
+            Const::MethodRef(i, l) => match *i {
+                Const::String(val) => match val.as_str() {
+                    // Cheat-y way of getting System.out.println working without a standard library to access
+                    "java/io/PrintStream" => {
+                        let args = vec![frame.stack.pop().unwrap()];
+                        match &args[0] {
+                            JvmVal::String(val) => println!("{}", val),
+                            JvmVal::Int(val) => println!("{}", val),
+                            JvmVal::Float(val) => println!("{}", val),
+                            JvmVal::Array(vals) => println!("{:?}", vals),
+                            JvmVal::Reference(val) => {
+                                let val = self.heap.fetch(*val);
+                                match val {
+                                    JvmVal::Class(name, vals) => {
+                                        if name == "java/lang/Boolean" {
+                                            println!(
+                                                "{}",
+                                                if vals.get("value").unwrap().clone()
+                                                    == JvmVal::Int(0)
+                                                {
+                                                    "false"
+                                                } else {
+                                                    "true"
+                                                }
+                                            );
+                                        } else {
+                                            for (k, v) in vals {
+                                                println!("{:?}: {:?}", k, v);
+                                            }
+                                        }
+                                    }
+                                    JvmVal::Array(vals) => println!("{:?}", vals),
+                                    _ => panic!("not a class, got {:?}", val),
+                                }
+                            }
+                            _ => println!("{:?}", args[0]),
+                        }
+                    }
+                    _ => {
+                        let mut args = vec![];
+                        let (name, typ) = match *l {
+                            Const::NameAndType(name, typ) => match *name {
+                                Const::String(val) => match *typ {
+                                    Const::String(v) => (val, v),
+                                    _ => panic!(),
+                                },
+                                _ => panic!(),
+                            },
+                            _ => panic!(),
+                        };
+                        for _ in 0..parse_descriptors(typ) {
+                            args.push(frame.stack.pop().unwrap());
+                        }
+                        let clss = self.classes.get(&val);
+                        if clss.is_some() {
+                            let cls = clss.unwrap().clone();
+                            if !MethodFlag::Static
+                                .is_set(cls.methods.iter().find(|x| x.name == name).unwrap().flags)
+                            {
+                                let refer = frame.stack.pop().unwrap().clone();
+                                args.insert(0, refer);
+                            }
+                            let mut f = Frame::from_method(&cls, name, args).unwrap();
+
+                            let result = self.exec(&cls, &mut f);
+                            frame.stack.push(result);
+                        } else {
+                            let builtin = stdlib::get_builtins(val.clone());
+
+                            let refer = frame.stack.pop().unwrap().clone();
+                            args.insert(0, refer);
+
+                            return builtin.get_method(name)(self, args);
+                        }
+                    }
+                },
+                _ => panic!(),
+            },
+            _ => panic!(),
+        }
+        JvmVal::Null
+    }
+
+    #[time]
+    fn invoke_dynamic(
+        self: &mut VM,
+        class: &Class,
+        frame: &mut Frame,
+        index: u16,
+        _args: Vec<JvmVal>,
+    ) -> JvmVal {
+        let l = class.const_pool.resolve(index).unwrap();
+        self.debug(frame.id, format!("invoke_dynamic: {:?}", l));
         match l {
             Const::MethodRef(i, l) => match *i {
                 Const::String(val) => match val.as_str() {
