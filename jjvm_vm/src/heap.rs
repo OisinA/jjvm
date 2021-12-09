@@ -64,7 +64,7 @@ impl Heap {
                 continue;
             }
             if !all_refs.contains(&(i as u32)) {
-                (&mut self.heap[i]).1 = false;
+                self.heap[i].1 = false;
                 claimed += 1;
             }
         }

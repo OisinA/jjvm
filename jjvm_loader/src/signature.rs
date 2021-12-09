@@ -93,7 +93,7 @@ impl TypeSignature {
     pub fn from_str<S: AsRef<str>>(s: S) -> Result<TypeSignature, Error> {
         Ok(match parser(parse_sig).parse(s.as_ref()).map(|res| res.0) {
             Ok(JavaType::Method(sig)) => *sig,
-            Err(_) => return Err(Error::ParseFailed(s.as_ref().to_owned().to_string())),
+            Err(_) => return Err(Error::ParseFailed(s.as_ref().to_owned())),
             _ => unreachable!(),
         })
     }

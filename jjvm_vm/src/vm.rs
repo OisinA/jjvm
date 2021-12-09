@@ -622,7 +622,7 @@ impl VM {
                             if !MethodFlag::Static
                                 .is_set(cls.methods.iter().find(|x| x.name == name).unwrap().flags)
                             {
-                                let refer = frame.stack.pop().unwrap().clone();
+                                let refer = frame.stack.pop().unwrap();
                                 args.insert(0, refer);
                             }
                             let mut f = Frame::from_method(&cls, name, args).unwrap();
@@ -632,7 +632,7 @@ impl VM {
                         } else {
                             let builtin = stdlib::get_builtins(val.clone());
 
-                            let refer = frame.stack.pop().unwrap().clone();
+                            let refer = frame.stack.pop().unwrap();
                             args.insert(0, refer);
 
                             return builtin.get_method(name)(self, args);
@@ -714,7 +714,7 @@ impl VM {
                             if !MethodFlag::Static
                                 .is_set(cls.methods.iter().find(|x| x.name == name).unwrap().flags)
                             {
-                                let refer = frame.stack.pop().unwrap().clone();
+                                let refer = frame.stack.pop().unwrap();
                                 args.insert(0, refer);
                             }
                             let mut f = Frame::from_method(&cls, name, args).unwrap();
@@ -724,7 +724,7 @@ impl VM {
                         } else {
                             let builtin = stdlib::get_builtins(val.clone());
 
-                            let refer = frame.stack.pop().unwrap().clone();
+                            let refer = frame.stack.pop().unwrap();
                             args.insert(0, refer);
 
                             return builtin.get_method(name)(self, args);

@@ -12,9 +12,7 @@ impl BuiltinClass for MathClass {
     }
 
     fn get_fields(&self) -> Vec<Field> {
-        let fields = vec![];
-
-        return fields;
+        vec![]
     }
 
     fn get_method(&self, method: String) -> fn(&mut VM, Vec<JvmVal>) -> JvmVal {
@@ -79,7 +77,7 @@ impl MathClass {
                     }
                 }
 
-                return JvmVal::Int(min);
+                JvmVal::Int(min)
             }
             JvmVal::Long(l) => {
                 let mut min = l;
@@ -95,7 +93,7 @@ impl MathClass {
                     }
                 }
 
-                return JvmVal::Long(min);
+                JvmVal::Long(min)
             }
             JvmVal::Float(f) => {
                 let mut min = f;
@@ -111,7 +109,7 @@ impl MathClass {
                     }
                 }
 
-                return JvmVal::Float(min);
+                JvmVal::Float(min)
             }
             JvmVal::Double(d) => {
                 let mut min = d;
@@ -127,7 +125,7 @@ impl MathClass {
                     }
                 }
 
-                return JvmVal::Double(min);
+                JvmVal::Double(min)
             }
             _ => panic!("unsupported type"),
         }

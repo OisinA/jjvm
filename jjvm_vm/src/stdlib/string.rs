@@ -14,14 +14,12 @@ impl BuiltinClass for StringClass {
     }
 
     fn get_fields(&self) -> Vec<Field> {
-        let fields = vec![Field {
+        vec![Field {
             flags: 0x0001,
             name: "value".to_string(),
             descriptor: "LI;".to_string(),
             attributes: vec![],
-        }];
-
-        return fields;
+        }]
     }
 
     fn get_method(&self, method: String) -> fn(&mut VM, Vec<JvmVal>) -> JvmVal {
@@ -55,7 +53,7 @@ impl StringClass {
         let result = str
             .split(split_char.as_str())
             .map(|s| s.to_string())
-            .map(|s| JvmVal::String(s))
+            .map(JvmVal::String)
             .collect::<Vec<JvmVal>>();
 
         let mut ptrs = vec![];

@@ -152,7 +152,9 @@ impl ClassLoader {
 
         for _ in 1..const_pool_count {
             let tag = self.u1();
+            // let pos = self.bytes.position() - 1;
             let result = JvmConst::from_tag(tag, self).unwrap();
+            // println!("{:#x}, {:?}, {:?}", pos, result, tag);
             consts.push(result);
         }
 

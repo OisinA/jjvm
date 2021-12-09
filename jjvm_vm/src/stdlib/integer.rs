@@ -14,14 +14,12 @@ impl BuiltinClass for IntegerClass {
     }
 
     fn get_fields(&self) -> Vec<Field> {
-        let fields = vec![Field {
+        vec![Field {
             flags: 0x0001,
             name: "value".to_string(),
             descriptor: "LI;".to_string(),
             attributes: vec![],
-        }];
-
-        return fields;
+        }]
     }
 
     fn get_method(&self, method: String) -> fn(&mut VM, Vec<JvmVal>) -> JvmVal {
@@ -86,6 +84,6 @@ impl IntegerClass {
             None => panic!("invalid argument"),
         };
 
-        return value.clone();
+        value.clone()
     }
 }

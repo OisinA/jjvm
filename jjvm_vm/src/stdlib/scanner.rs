@@ -14,14 +14,12 @@ impl BuiltinClass for ScannerClass {
     }
 
     fn get_fields(&self) -> Vec<Field> {
-        let fields = vec![Field {
+        vec![Field {
             flags: 0x0001,
             name: "path".to_string(),
             descriptor: "Ljava/lang/String;".to_string(),
             attributes: vec![],
-        }];
-
-        return fields;
+        }]
     }
 
     fn get_method(&self, method: String) -> fn(&mut VM, Vec<JvmVal>) -> JvmVal {
@@ -78,28 +76,20 @@ impl ScannerClass {
         };
 
         let line_pointer = match scanner_values.get(&"line_pointer".to_string()) {
-            Some(v) => match v {
-                JvmVal::Int(i) => i,
-                _ => panic!("invalid argument"),
-            },
-            None => panic!("invalid argument"),
+            Some(JvmVal::Int(i)) => i,
+            _ => panic!("invalid argument"),
         };
 
         let content = match scanner_values.get(&"content".to_string()) {
-            Some(v) => match v {
-                JvmVal::String(val) => val,
-                _ => panic!("invalid argument"),
-            },
-            None => panic!("invalid argument"),
+            Some(JvmVal::String(val)) => val,
+            _ => panic!("invalid argument"),
         };
 
-        JvmVal::Int(
-            if *line_pointer < content.split("\n").collect::<Vec<_>>().len() as i32 {
-                1
-            } else {
-                0
-            },
-        )
+        JvmVal::Int(if *line_pointer < content.split('\n').count() as i32 {
+            1
+        } else {
+            0
+        })
     }
 
     fn next_line(vm: &mut VM, vals: Vec<JvmVal>) -> JvmVal {
@@ -117,27 +107,21 @@ impl ScannerClass {
 
         let cloned = scanner_values.clone();
         let line_pointer = match scanner_values.get_mut(&"line_pointer".to_string()) {
-            Some(v) => match v {
-                JvmVal::Int(i) => {
-                    *i += 1;
-                    i
-                }
-                _ => panic!("invalid argument"),
-            },
-            None => panic!("invalid argument"),
+            Some(JvmVal::Int(i)) => {
+                *i += 1;
+                i
+            }
+            _ => panic!("invalid argument"),
         };
 
         let content = match cloned.get(&"content".to_string()) {
-            Some(v) => match v {
-                JvmVal::String(s) => s,
-                _ => panic!("invalid argument"),
-            },
-            None => panic!("invalid argument"),
+            Some(JvmVal::String(s)) => s,
+            _ => panic!("invalid argument"),
         };
 
         JvmVal::String(
             content
-                .split("\n")
+                .split('\n')
                 .nth(*line_pointer as usize - 1)
                 .unwrap()
                 .to_string(),
